@@ -3,6 +3,7 @@
 - 조사일: 2026-10-13
 - 대상: Google Sheet 「온라인 사업 아이디어」의 재미나이 탭 1–30위, 클로드 탭 1–30위
 - 출처: news.ycombinator.com, indiehackers.com (도메인 제한 검색)
+- 한국 커뮤니티 조사: [2026-korea-community-research.md](2026-korea-community-research.md)
 
 ## 조사 방법과 한계
 
