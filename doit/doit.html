@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<style>
+@font-face{font-family:BH;src:url(BlackHanSans-Regular.ttf)}
+@font-face{font-family:JU;src:url(Jua-Regular.ttf)}
+html,body{margin:0;background:#000}
+#stage{position:relative;width:1080px;height:1920px;overflow:hidden;background:#FBF7EE}
+#layer{position:absolute;inset:0}
+.a{position:absolute}
+.t{position:absolute;white-space:nowrap;line-height:1.05;transform-origin:50% 50%}
+.r{filter:url(#rough)}
+.pol{position:absolute;background:#fff;padding:18px 18px 54px;box-shadow:0 18px 40px rgba(0,0,0,.28);transform-origin:50% 50%}
+.pol img{display:block;width:100%}
+.pill{position:absolute;white-space:nowrap;border-radius:999px;line-height:1;transform-origin:50% 50%}
+#grain{position:absolute;left:0;top:0;pointer-events:none}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<filter id="rough" x="-10%" y="-10%" width="120%" height="120%">
+<feTurbulence id="rt" type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="1" result="n"/>
+<feDisplacementMap in="SourceGraphic" in2="n" scale="4" xChannelSelector="R" yChannelSelector="G"/>
+</filter>
+</defs></svg>
+<div id="stage">
+<div id="layer"></div>
+<svg id="grain" width="1080" height="1920">
+<filter id="gf"><feTurbulence id="gt" type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="1"/><feColorMatrix type="saturate" values="0"/></filter>
+<filter id="pf"><feTurbulence type="fractalNoise" baseFrequency="0.006" numOctaves="3" seed="7"/><feColorMatrix type="saturate" values="0"/></filter>
+<rect width="1080" height="1920" filter="url(#pf)" style="mix-blend-mode:overlay;opacity:.14"/>
+<rect width="1080" height="1920" filter="url(#gf)" style="mix-blend-mode:overlay;opacity:.16"/>
+<rect id="fade" width="1080" height="1920" fill="#000" opacity="0"/>
+</svg>
+</div>
+<script>
+const PAPER='#FBF7EE',INK='#1A1A1A',RED='#E5383B',BLUE='#2B59C3',YEL='#FFD23F',WHITE='#FFFFFF',NAVER='#03C75A';
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const P=(t,a,d)=>clamp((t-a)/d);
+const oC=x=>1-Math.pow(1-x,3);
+const ioC=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const oB=x=>{const c1=2.2,c3=c1+1;return 1+c3*Math.pow(x-1,3)+c1*Math.pow(x-1,2)};
+const chars=s=>Array.from(s);
+
+window.__ev=[];
+let curT=0,lastT=-1,boil=0;
+// record an event once, on the frame where the clock passes its time
+function ev(type,at){ if(lastT<at && at<=curT) __ev.push([type,+at.toFixed(3)]); }
+// deterministic 12fps jitter for the hand-animated "boil"
+function jit(k){const v=Math.sin(k*12.9898+boil*78.233)*43758.5453;return v-Math.floor(v)-.5;}
+
+function T(s,o){
+  const sc=o.sc??1, rot=(o.rot||0)+(o.boil===false?0:jit(o.y+o.x)*1.0);
+  return `<div class="t${o.rough===false?'':' r'}" style="left:${o.x}px;top:${o.y}px;font-family:${o.font||'JU'};font-size:${o.size}px;color:${o.col};opacity:${o.op??1};letter-spacing:${o.ls||0}px;${o.css||''};transform:translate(-50%,-50%) rotate(${rot}deg) scale(${sc})">${s}</div>`;
+}
+// word slams in: big -> overshoot -> settle
+function stamp(lt,S,at,o,fn=T){
+  ev('stamp',S+at);
+  if(lt<at) return '';
+  const p=P(lt,at,.16);
+  return fn(o.s,{...o,sc:(o.sc??1)*(1.8-.8*oB(p)),op:clamp(p*4)});
+}
+// letters typed one at a time
+function typed(lt,S,at,cps,o){
+  const cs=chars(o.s);
+  cs.forEach((c,i)=>{ if(c!==' ') ev('click',S+at+i/cps); });
+  if(lt<at) return '';
+  const n=Math.min(cs.length,Math.floor((lt-at)*cps)+1);
+  return T(cs.slice(0,n).join('')+'<span style="opacity:0">'+cs.slice(n).join('')+'</span>',o);
+}
+// each letter of a word stamps on its own beat
+function perChar(lt,S,at,step,o){
+  const cs=chars(o.s); let h='';
+  const x0=o.x-(cs.length-1)*o.cw/2;
+  cs.forEach((c,i)=>{ h+=stamp(lt,S,at+i*step,{...o,s:c,x:x0+i*o.cw}); });
+  return h;
+}
+function pill(s,o){
+  return `<div class="pill" style="left:${o.x}px;top:${o.y}px;background:${o.bg};color:${o.col};font-family:${o.font||'BH'};font-size:${o.size}px;padding:${o.size*.32}px ${o.size*.6}px;opacity:${o.op??1};transform:translate(-50%,-50%) rotate(${o.rot||0}deg) scale(${o.sc??1})">${s}</div>`;
+}
+// photo in a white frame that drops in with a tilt
+function polaroid(lt,S,at,o){
+  ev('pop',S+at);
+  if(lt<at) return '';
+  const p=oB(P(lt,at,.45)), rot=(o.rot||0)+(1-p)*14;
+  return `<div class="pol" style="left:${o.x}px;top:${o.y}px;width:${o.w}px;transform:translate(-50%,-50%) translateY(${(1-p)*900}px) rotate(${rot}deg)"><img src="img/${o.img}"></div>`;
+}
+const svg=(inner)=>`<svg class="a" style="left:0;top:0" width="1080" height="1920">${inner}</svg>`;
+const hl=(x,y,w,h,p,col=YEL)=>`<div class="a r" style="left:${x-w/2}px;top:${y-h/2}px;width:${w*p}px;height:${h}px;background:${col};border-radius:8px;transform:rotate(-1.5deg)"></div>`;
+
+// ---------- scenes ----------
+function s1(lt,S){ // empathy: the problem
+  let h='';
+  h+=typed(lt,S,.1,10,{s:'학원을 다녀도',x:540,y:400,size:120,col:INK});
+  h+=hl(222,668,250,66,oC(P(lt,1.1,.25)));
+  h+=stamp(lt,S,1.0,{s:'단어는 헷갈리고',x:540,y:640,size:140,col:INK,font:'BH'});
+  h+=hl(215,882,210,60,oC(P(lt,1.85,.25)),'#BFD3FF');
+  h+=stamp(lt,S,1.75,{s:'해석은 막막하다면',x:540,y:860,size:120,col:INK,font:'BH'});
+  if(lt>=2.5){
+    const w=Math.sin(lt*7)*8;
+    h+=stamp(lt,S,2.5,{s:'?',x:540,y:1340,size:620,col:RED,font:'BH',rot:w});
+    const d=P(lt,2.8,.6);
+    if(d>0) h+=svg(`<g class="r" opacity="${1-P(lt,3.2,.3)}"><path d="M790 ${1080+d*60} q18 30 0 46 q-18 -16 0 -46z" fill="${BLUE}"/><path d="M300 ${1120+d*70} q14 24 0 36 q-14 -12 0 -36z" fill="${BLUE}"/></g>`);
+  }
+  const w=ioC(P(lt,3.5,.5)); ev('whoosh',S+3.5);
+  if(w>0) h+=`<div class="a" style="inset:0;background:${BLUE};clip-path:circle(${w*2300}px at 50% 70%)"></div>`;
+  return {bg:PAPER,h};
+}
+function s2(lt,S){ // the Do it way
+  let h='';
+  h+=typed(lt,S,.1,12,{s:'아이마다 다른',x:540,y:250,size:100,col:WHITE});
+  h+=typed(lt,S,.6,12,{s:'출발점과 속도에 맞춰',x:540,y:370,size:100,col:WHITE});
+  h+=polaroid(lt,S,.3,{img:'tables.jpg',x:540,y:830,w:760,rot:-4});
+  h+=stamp(lt,S,1.5,{s:'무학년 개별진도',x:540,y:1340,size:150,col:YEL,font:'BH'});
+  h+=stamp(lt,S,2.0,{s:'+',x:540,y:1460,size:90,col:WHITE,font:'BH'});
+  h+=stamp(lt,S,2.25,{s:'원장 1:1 밀착 코칭',x:540,y:1590,size:130,col:WHITE,font:'BH'});
+  const w=ioC(P(lt,3.5,.5)); ev('whoosh',S+3.5);
+  if(w>0) h+=`<div class="a" style="left:${1080*(1-w)}px;top:0;width:1100px;height:1920px;background:${PAPER}"></div>`;
+  return {bg:BLUE,h};
+}
+// ---- the four steps ----
+function stepWord(lt,S){
+  const flip=ioC(P(lt,1.3,.4)), ang=flip*180, front=ang<90;
+  ev('whoosh',S+1.3);
+  const sc=Math.abs(Math.cos(ang*Math.PI/180));
+  const op=oC(P(lt,.6,.3));
+  let arcs='';
+  for(let i=0;i<3;i++){ const a=clamp(Math.sin(lt*6-i*.9)*.5+.5); arcs+=`<path d="M${880+i*28} ${1600-i*22} q${30+i*10} ${40+i*22} 0 ${80+i*44}" stroke="${RED}" stroke-width="10" fill="none" stroke-linecap="round" opacity="${a*op}"/>`; }
+  return `<div class="a r" style="left:250px;top:1560px;width:580px;height:200px;background:${front?WHITE:YEL};border:6px solid ${INK};border-radius:28px;opacity:${op};transform:scaleX(${sc});display:flex;align-items:center;justify-content:center;font-family:${front?'BH':'JU'};font-size:${front?120:110}px;color:${front?BLUE:INK}">${front?'focus':'집중하다'}</div>`+svg(`<g class="r">${arcs}</g>`);
+}
+function stepRead(lt,S){
+  const chunks=['GPS','uses','satellites','to find the location'], labels=['주어','동사','목적어','수식어'];
+  const op=oC(P(lt,.6,.3));
+  let row='';
+  chunks.forEach((c,i)=>{
+    const lp=oB(P(lt,1.0+i*.22,.2));
+    if(i>0){ ev('click',S+.9+i*.22); row+=`<span style="color:${RED};font-family:BH;display:inline-block;margin:0 8px;transform:scale(${P(lt,.9+i*.22,.1)})">/</span>`; }
+    row+=`<span style="white-space:nowrap;display:inline-flex;flex-direction:column;align-items:center">${c}<span style="font-size:40px;color:${RED};margin-top:12px;opacity:${clamp(lp)};transform:scale(${lp})">${labels[i]}</span></span>`;
+  });
+  return `<div class="a r" style="left:40px;top:1540px;width:1000px;height:250px;background:${WHITE};border:6px solid ${INK};border-radius:28px;opacity:${op};display:flex;align-items:center;justify-content:center;font-family:JU;font-size:48px;color:${INK}">${row}</div>`;
+}
+function stepGrammar(lt,S){
+  const op=oC(P(lt,.6,.3)), m=P(lt,1.3,.25), sw=Math.abs(Math.cos(m*Math.PI));
+  ev('stamp',S+1.3);
+  const sym=m<.5?'?':'!';
+  return T(sym,{x:250,y:1660,size:300,col:RED,font:'BH',op,sc:sw*.9+.1})
+   +T(m<.5?'왜 이 답일까?':'이유를 설명해요',{x:680,y:1660,size:78,col:INK,op});
+}
+function stepListen(lt,S){
+  const op=oC(P(lt,.6,.3));
+  let bars='';
+  for(let i=0;i<22;i++){ const hgt=24+90*Math.abs(Math.sin(lt*8+i*.7)*Math.sin(i*.45+1)); bars+=`<rect x="${130+i*38}" y="${1740-hgt/2}" width="22" height="${hgt}" rx="11" fill="${BLUE}" opacity="${op}"/>`; }
+  return typed(lt,S,.6,10,{s:'want to → wanna',x:540,y:1590,size:90,col:INK})+svg(`<g class="r">${bars}</g>`);
+}
+const STEPS=[
+  {n:'STEP 1',title:'단어',desc:'소리와 뜻을 연결하고',img:'shelf.jpg',fx:stepWord},
+  {n:'STEP 2',title:'독해',desc:'문장 구조를 끊어 읽고',img:'book.jpg',fx:stepRead},
+  {n:'STEP 3',title:'문법',desc:'왜 그 답인지 설명하고',img:'class.jpg',fx:stepGrammar},
+  {n:'STEP 4',title:'듣기',desc:'연음과 받아쓰기로 귀를 열고',img:'pc.jpg',fx:stepListen},
+];
+const STEP_LEN=2.5;
+function s3(lt,S){
+  let h='';
+  STEPS.forEach((st,k)=>{
+    const a=lt-k*STEP_LEN; if(a<0||a>STEP_LEN+.3) return;
+    const enter=k===0?0:1080*(1-ioC(P(a,0,.3)));
+    const exit=k===STEPS.length-1?0:-1080*ioC(P(a,STEP_LEN,.3));
+    if(k>0) ev('whoosh',S+k*STEP_LEN);
+    const SS=S+k*STEP_LEN;
+    let c='';
+    c+=stamp(a,SS,.1,{s:st.n,x:540,y:220,size:64,col:WHITE,bg:RED},pill);
+    c+=stamp(a,SS,.35,{s:st.title,x:540,y:430,size:280,col:INK,font:'BH'});
+    c+=typed(a,SS,.55,14,{s:st.desc,x:540,y:640,size:80,col:BLUE});
+    c+=polaroid(a,SS,.2,{img:st.img,x:540,y:1110,w:820,rot:k%2?3:-3});
+    c+=st.fx(a,SS);
+    h+=`<div class="a" style="inset:0;background:${PAPER};transform:translateX(${enter+exit}px)">${c}</div>`;
+  });
+  return {bg:PAPER,h};
+}
+function s4(lt,S){ // the promise
+  let h='';
+  const z=1.08+lt*.03;
+  h+=`<div class="a" style="inset:0;background:url(img/hall.jpg) center/cover;transform:scale(${z})"></div>`;
+  h+=`<div class="a" style="inset:0;background:${BLUE};opacity:.82"></div>`;
+  h+=typed(lt,S,.1,11,{s:'진도보다 중요한 건',x:540,y:700,size:110,col:WHITE});
+  h+=stamp(lt,S,1.0,{s:'제대로 이해하고',x:540,y:930,size:150,col:YEL,font:'BH'});
+  h+=stamp(lt,S,1.5,{s:'내 것으로 만드는 것',x:540,y:1140,size:118,col:WHITE,font:'BH'});
+  const w=ioC(P(lt,3.0,.5)); ev('whoosh',S+3.0);
+  if(w>0) h+=`<div class="a" style="left:0;top:${1920*(1-w)}px;width:1080px;height:1940px;background:${PAPER}"></div>`;
+  return {bg:BLUE,h};
+}
+function s5(lt,S){ // contact card
+  let h='';
+  h+=polaroid(lt,S,.0,{img:'building.jpg',x:540,y:400,w:880,rot:-2});
+  h+=typed(lt,S,.4,14,{s:'초·중·고 영어 전문',x:540,y:770,size:72,col:BLUE});
+  h+=hl(540,935,640,70,oC(P(lt,1.6,.3)));
+  h+=perChar(lt,S,.75,.18,{s:'두잇영어',x:540,y:910,size:220,col:INK,font:'BH',cw:205});
+  h+=stamp(lt,S,1.9,{s:'무료 1:1 레벨진단',x:540,y:1130,size:92,col:WHITE,bg:RED},pill);
+  h+=typed(lt,S,2.15,18,{s:'약 30분 · 사전 예약 필수',x:540,y:1245,size:60,col:INK});
+  h+=stamp(lt,S,2.75,{s:'010-4853-9297',x:540,y:1400,size:132,col:BLUE,font:'BH'});
+  h+=typed(lt,S,3.0,20,{s:'수업 중엔 문자 문의를 권장해요',x:540,y:1495,size:52,col:'#555'});
+  h+=typed(lt,S,3.5,20,{s:'울산 북구 산하동 화암1길 51, 2층',x:540,y:1610,size:60,col:INK});
+  h+=stamp(lt,S,4.25,{s:'네이버 톡톡 예약 · ‘두잇영어’ 검색',x:540,y:1730,size:54,col:WHITE,bg:NAVER,font:'JU'},pill);
+  h+=T('교습소 신고번호 제3785호',{x:540,y:1860,size:34,col:'#888',op:oC(P(lt,4.5,.4)),boil:false});
+  return {bg:PAPER,h};
+}
+const SCENES=[[0,s1],[4,s2],[8,s3],[18,s4],[21.5,s5]];
+const DUR=29;
+window.DUR=DUR;
+window.render=function(t){
+  curT=t; boil=Math.floor(t*12);
+  document.getElementById('rt').setAttribute('seed',boil%40+1);
+  document.getElementById('gt').setAttribute('seed',Math.floor(t*24)%60+1);
+  let i=SCENES.length-1; while(SCENES[i][0]>t) i--;
+  const [S,fn]=SCENES[i];
+  const out=fn(t-S,S);
+  document.getElementById('stage').style.background=out.bg;
+  document.getElementById('layer').innerHTML=out.h;
+  document.getElementById('fade').setAttribute('opacity',P(t,DUR-.45,.45));
+  lastT=t;
+};
+</script>
+</body></html>
