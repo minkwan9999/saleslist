@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<style>
+@font-face{font-family:BH;src:url(BlackHanSans-Regular.ttf)}
+@font-face{font-family:DH;src:url(DoHyeon-Regular.ttf)}
+html,body{margin:0;background:#000}
+#stage{position:relative;width:1080px;height:1920px;overflow:hidden;background:#C3242F}
+#layer{position:absolute;inset:0}
+.a{position:absolute}
+.t{position:absolute;white-space:nowrap;line-height:1;transform-origin:50% 50%}
+.r{filter:url(#rough)}
+#grain{position:absolute;left:0;top:0;pointer-events:none}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<filter id="rough" x="-10%" y="-10%" width="120%" height="120%">
+<feTurbulence id="rt" type="fractalNoise" baseFrequency="0.04" numOctaves="2" seed="1" result="n"/>
+<feDisplacementMap in="SourceGraphic" in2="n" scale="8" xChannelSelector="R" yChannelSelector="G"/>
+</filter>
+</defs></svg>
+<div id="stage">
+<div id="layer"></div>
+<svg id="grain" width="1080" height="1920">
+<filter id="gf"><feTurbulence id="gt" type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="1"/><feColorMatrix type="saturate" values="0"/></filter>
+<filter id="pf"><feTurbulence type="fractalNoise" baseFrequency="0.006" numOctaves="3" seed="7"/><feColorMatrix type="saturate" values="0"/></filter>
+<rect width="1080" height="1920" filter="url(#pf)" style="mix-blend-mode:overlay;opacity:.22"/>
+<rect width="1080" height="1920" filter="url(#gf)" style="mix-blend-mode:overlay;opacity:.28"/>
+<rect id="fade" width="1080" height="1920" fill="#000" opacity="0"/>
+</svg>
+</div>
+<script>
+const R='#C3242F',C='#ECE4CC',K='#0E0D0D',DR='#8E1820';
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const P=(t,a,d)=>clamp((t-a)/d);
+const oC=x=>1-Math.pow(1-x,3);
+const ioC=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const oB=x=>{const c1=2.2,c3=c1+1;return 1+c3*Math.pow(x-1,3)+c1*Math.pow(x-1,2)};
+const chars=s=>Array.from(s);
+
+window.__ev=[];
+let curT=0,lastT=-1,boil=0;
+// record an event once, on the frame where the clock passes its time
+function ev(type,at){ if(lastT<at && at<=curT) __ev.push([type,+at.toFixed(3)]); }
+// deterministic 12fps jitter for the hand-animated "boil"
+function jit(k){const v=Math.sin(k*12.9898+boil*78.233)*43758.5453;return v-Math.floor(v)-.5;}
+
+function T(s,o){
+  const sc=o.sc??1, rot=(o.rot||0)+(o.boil===false?0:jit(o.y+o.x)*1.6);
+  return `<div class="t${o.rough===false?'':' r'}" style="left:${o.x}px;top:${o.y}px;font-family:${o.font||'DH'};font-size:${o.size}px;color:${o.col};opacity:${o.op??1};letter-spacing:${o.ls||0}px;transform:translate(-50%,-50%) rotate(${rot}deg) scale(${sc*(o.sx??1)},${sc*(o.sy??1)})">${s}</div>`;
+}
+// word slams in: big -> overshoot -> settle
+function stamp(lt,S,at,o){
+  ev('stamp',S+at);
+  if(lt<at) return '';
+  const p=P(lt,at,.16);
+  return T(o.s,{...o,sc:(o.sc??1)*(1.9-.9*oB(p)),op:clamp(p*4)});
+}
+// letters typed one at a time
+function typed(lt,S,at,cps,o){
+  const cs=chars(o.s);
+  cs.forEach((c,i)=>{ if(c!==' ') ev('click',S+at+i/cps); });
+  if(lt<at) return '';
+  const n=Math.min(cs.length,Math.floor((lt-at)*cps)+1);
+  return T(cs.slice(0,n).join('')+'<span style="opacity:0">'+cs.slice(n).join('')+'</span>',o);
+}
+// each letter of a word stamps on its own beat
+function perChar(lt,S,at,step,o){
+  const cs=chars(o.s); let h='';
+  const w=o.cw; const x0=o.x-(cs.length-1)*w/2;
+  cs.forEach((c,i)=>{ h+=stamp(lt,S,at+i*step,{...o,s:c,x:x0+i*w}); });
+  return h;
+}
+const svg=(inner)=>`<svg class="a" style="left:0;top:0" width="1080" height="1920">${inner}</svg>`;
+
+// ---------- scenes ----------
+function s1(lt,S){ // intro title card, red
+  let h='';
+  h+=stamp(lt,S,.0,{s:'민관이',x:540,y:400,size:230,col:C,font:'BH'});
+  h+=stamp(lt,S,.5,{s:'고른',x:540,y:640,size:230,col:C,font:'BH'});
+  h+=perChar(lt,S,1.0,.125,{s:'PICK',x:540,y:1010,size:380,col:C,font:'BH',cw:250});
+  h+=typed(lt,S,1.5,16,{s:'@minkwan444',x:540,y:1340,size:96,col:K,ls:4});
+  const w=ioC(P(lt,2.0,.5)); ev('whoosh',S+2.0);
+  if(w>0) h+=`<div class="a" style="left:${1080*(1-w)}px;top:0;width:1100px;height:1920px;background:${K}"></div>`;
+  return {bg:R,h};
+}
+function s2(lt,S){ // black, typed question
+  let h='';
+  h+=typed(lt,S,.1,9,{s:'출출하지?',x:540,y:830,size:210,col:C,font:'BH'});
+  h+=stamp(lt,S,1.0,{s:'그럼 들어봐',x:560,y:1060,size:130,col:R,rot:-5});
+  const w=ioC(P(lt,1.6,.4)); ev('whoosh',S+1.6);
+  if(w>0) h+=`<div class="a" style="left:0;top:${1920*(1-w)}px;width:1080px;height:1940px;background:${R}"></div>`;
+  return {bg:K,h};
+}
+function bottle(x,base,s,i,lt){
+  const p=oB(P(lt,.15+i*.08,.3));
+  if(p<=0) return '';
+  return `<g transform="translate(${x},${base}) scale(${s},${s*p}) translate(-55,-280)">
+   <rect x="36" y="0" width="38" height="26" rx="5" fill="${K}"/>
+   <path d="M42 22 H68 V55 C68 78 105 82 105 112 V258 Q105 280 84 280 H26 Q5 280 5 258 V112 C5 82 42 78 42 55 Z" fill="${K}"/>
+   <rect x="5" y="150" width="100" height="56" fill="${C}" opacity=".92"/>
+   <rect x="5" y="162" width="100" height="8" fill="${R}"/>
+  </g>`;
+}
+function s3(lt,S){ // water, red with cream floor
+  let h='';
+  h+=`<div class="a" style="left:0;top:1500px;width:1080px;height:420px;background:${C}"></div>`;
+  // spinning ring of text
+  const rp=oC(P(lt,.2,.5));
+  if(rp>0){
+    const ring='목마를 땐 박스째 · 쟁여두기 · 목마를 땐 박스째 · 쟁여두기 · ';
+    h+=svg(`<defs><path id="ring" d="M540,650 m-330,0 a330,330 0 1,1 660,0 a330,330 0 1,1 -660,0"/></defs>
+     <g class="r" opacity="${rp}" transform="rotate(${lt*38-60*(1-rp)} 540 650) translate(540 650) scale(${.7+.3*rp}) translate(-540 -650)">
+     <text font-family="DH" font-size="76" fill="${C}"><textPath href="#ring" textLength="2060" lengthAdjust="spacing">${ring}</textPath></text></g>`);
+    ev('whoosh',S+.2);
+  }
+  h+=stamp(lt,S,.75,{s:'스파클',x:540,y:600,size:200,col:C,font:'BH'});
+  h+=stamp(lt,S,1.0,{s:'생수',x:540,y:770,size:150,col:K,font:'BH'});
+  h+=stamp(lt,S,1.5,{s:'2L',x:320,y:1110,size:170,col:C,font:'BH'});
+  h+=stamp(lt,S,1.75,{s:'× 24개',x:700,y:1115,size:150,col:K,font:'BH'});
+  let b=''; for(let i=0;i<6;i++) b+=bottle(140+i*160,1500,.95,i,lt);
+  if(lt>.1) ev('pop',S+.15);
+  h+=svg(`<g class="r">${b}</g>`);
+  h+=typed(lt,S,2.1,12,{s:'물 마실 시간!',x:540,y:1700,size:110,col:K,font:'BH'});
+  const w=ioC(P(lt,3.0,.5)); ev('whoosh',S+3.0);
+  if(w>0) h+=`<div class="a" style="inset:0;background:${K};clip-path:circle(${w*2300}px at 100% 0%)"></div>`;
+  return {bg:R,h};
+}
+function steam(i,x0,lt){
+  const p=oC(P(lt,.5+i*.12,.6)); if(p<=0) return '';
+  let d=''; const top=1110-300*p;
+  for(let y=1110;y>=top;y-=8){ const x=x0+26*Math.sin(y*.024+lt*5+i*2); d+=(d?'L':'M')+x.toFixed(1)+' '+y+' '; }
+  return `<path d="${d}" stroke="${C}" stroke-width="16" fill="none" stroke-linecap="round" opacity=".9"/>`;
+}
+function s4(lt,S){ // gomtang bowl, black
+  let h='';
+  h+=typed(lt,S,.1,9,{s:'푹 고아낸',x:540,y:300,size:130,col:R,font:'BH'});
+  h+=stamp(lt,S,.75,{s:'한우 사골',x:540,y:510,size:210,col:C,font:'BH'});
+  h+=stamp(lt,S,1.25,{s:'도가니탕',x:540,y:760,size:250,col:C,font:'BH'});
+  const by=(1-oB(P(lt,.0,.45)))*700;
+  ev('pop',S+.05);
+  h+=svg(`<g class="r" transform="translate(0 ${by})">
+    ${steam(0,450,lt)}${steam(1,545,lt)}${steam(2,640,lt)}
+    <ellipse cx="540" cy="1448" rx="150" ry="22" fill="${DR}"/>
+    <path d="M200 1180 Q205 1430 540 1440 Q875 1430 880 1180 Z" fill="${R}"/>
+    <path d="M230 1290 Q540 1340 850 1290" stroke="${K}" stroke-width="14" fill="none"/>
+    <ellipse cx="540" cy="1180" rx="340" ry="56" fill="${DR}"/>
+    <ellipse cx="540" cy="1182" rx="306" ry="42" fill="${C}"/>
+    <ellipse cx="470" cy="1176" rx="44" ry="12" fill="#CFC3A0"/>
+    <ellipse cx="610" cy="1188" rx="36" ry="10" fill="#CFC3A0"/>
+  </g>`);
+  h+=typed(lt,S,1.9,10,{s:'뜨끈~',x:830,y:960,size:110,col:C,rot:12});
+  h+=stamp(lt,S,2.25,{s:'500g × 5팩',x:540,y:1640,size:150,col:R,font:'BH'});
+  const w=ioC(P(lt,3.0,.5)); ev('whoosh',S+3.0);
+  if(w>0) h+=`<div class="a" style="inset:0;background:${R};clip-path:circle(${w*2200}px at 50% 62%)"></div>`;
+  return {bg:K,h};
+}
+function flames(lt,grow){
+  let f='';
+  for(let i=-1;i<15;i++){
+    const x=i*80+20, hgt=230+90*Math.sin(lt*9+i*1.7)+60*Math.sin(lt*14+i*.9)+grow*2300;
+    f+=`<path d="M${x-62} 1925 C${x-75} ${1920-hgt*.45} ${x-12} ${1920-hgt*.7} ${x+(i%2?14:-14)} ${1920-hgt} C${x+16} ${1920-hgt*.6} ${x+75} ${1920-hgt*.45} ${x+62} 1925 Z" fill="${K}"/>`;
+  }
+  return f+`<rect x="0" y="${1830-grow*2000}" width="1080" height="${100+grow*2000}" fill="${K}"/>`;
+}
+function briquette(lt){
+  const cx=540, ty=1290, rx=185, ry=56;
+  let holes=''; const ring=[[0,1],[78,6],[145,10]];
+  ring.forEach(([r,n],k)=>{ for(let j=0;j<n;j++){ const a=j/n*Math.PI*2+k*.3;
+    const glow=.55+.45*Math.sin(lt*7+j*1.3+k);
+    holes+=`<ellipse cx="${cx+r*Math.cos(a)}" cy="${ty+r*Math.sin(a)*ry/rx}" rx="17" ry="6" fill="${j%3?R:'#F2A33A'}" opacity="${glow}"/>`; } });
+  return `<rect x="${cx-rx}" y="${ty}" width="${rx*2}" height="250" fill="${K}"/>
+   <ellipse cx="${cx}" cy="${ty+250}" rx="${rx}" ry="${ry}" fill="${K}"/>
+   <ellipse cx="${cx}" cy="${ty}" rx="${rx}" ry="${ry}" fill="#2B2626"/>${holes}`;
+}
+function s5(lt,S){ // bulgogi, red with flames
+  let h='';
+  const g=ioC(P(lt,3.0,.5)); ev('whoosh',S+3.0);
+  h+=typed(lt,S,.1,9,{s:'을지로',x:540,y:290,size:140,col:C});
+  h+=stamp(lt,S,.5,{s:'연탄불맛',x:540+jit(3)*10,y:500+jit(4)*10,size:240,col:C,font:'BH'});
+  h+=stamp(lt,S,1.0,{s:'돼지',x:270,y:750,size:180,col:K,font:'BH'});
+  h+=stamp(lt,S,1.25,{s:'불고기',x:750,y:750,size:180,col:C,font:'BH'});
+  h+=stamp(lt,S,1.75,{s:'250g × 4개',x:540,y:975,size:150,col:K,font:'BH'});
+  const by=(1-oB(P(lt,.2,.45)))*900; ev('pop',S+.2);
+  h+=svg(`<g class="r"><g transform="translate(0 ${by})">${briquette(lt)}</g>${flames(lt,g)}</g>`);
+  return {bg:R,h};
+}
+function s6(lt,S){ // "won't lie" style growing words
+  let h='';
+  const gp=oC(P(lt,0,.6));
+  if(lt>=0) h+=T('고민은',{x:540,y:740,size:110+110*gp,col:K,font:'BH'});
+  h+=stamp(lt,S,.5,{s:'배송만',x:540,y:1000,size:260,col:K,font:'BH'});
+  h+=stamp(lt,S,1.0,{s:'늦출 뿐',x:540,y:1270,size:290,col:C,font:'BH'});
+  const w=ioC(P(lt,2.0,.5)); ev('whoosh',S+2.0);
+  if(w>0) h+=`<div class="a" style="left:0;top:${1920-570*w}px;width:1080px;height:600px;background:${C}"></div>`;
+  return {bg:R,h};
+}
+function s7(lt,S){ // cloche reveal + CTA
+  let h='';
+  h+=`<div class="a" style="left:0;top:1350px;width:1080px;height:570px;background:${C}"></div>`;
+  h+=svg(`<ellipse class="r" cx="540" cy="1352" rx="330" ry="34" fill="${K}"/>`);
+  h+=`<div class="a" style="left:375px;top:985px;width:330px;height:330px;border-radius:50%;overflow:hidden;border:12px solid ${C};box-shadow:0 0 0 8px ${K}">
+       <img src="profile.jpeg" style="width:100%;height:100%;object-fit:cover;object-position:50% 30%"></div>`;
+  const lift=ioC(P(lt,.75,.6)), rattle=lt<.75?Math.sin(lt*60)*3*P(lt,.2,.3):0;
+  ev('stamp',S+.75); ev('whoosh',S+.8);
+  if(lift<1) h+=svg(`<g class="r" transform="translate(${lift*260} ${-lift*1500}) rotate(${rattle-lift*25} 540 1350)">
+     <path d="M270 1350 Q270 1000 540 1000 Q810 1000 810 1350 Z" fill="${K}"/>
+     <circle cx="540" cy="985" r="32" fill="${K}"/>
+     <rect x="250" y="1336" width="580" height="26" rx="10" fill="${K}"/>
+     <path d="M350 1250 Q360 1090 470 1050" stroke="#3A3434" stroke-width="16" fill="none" stroke-linecap="round"/></g>`);
+  h+=typed(lt,S,1.2,12,{s:'프로필 링크에서',x:540,y:300,size:120,col:C,font:'BH'});
+  h+=perChar(lt,S,1.75,.25,{s:'지금담기',x:540,y:560,size:250,col:C,font:'BH',cw:235});
+  h+=stamp(lt,S,1.75+4*.25+.25,{s:'클릭!',x:880,y:790,size:120,col:K,font:'BH',rot:-10});
+  h+=typed(lt,S,2.25,14,{s:'@minkwan444',x:540,y:1540,size:120,col:K,font:'BH'});
+  h+=typed(lt,S,2.9,16,{s:'생수 · 도가니탕 · 불고기',x:540,y:1720,size:84,col:R,font:'BH'});
+  return {bg:R,h};
+}
+const SCENES=[[0,s1],[2.5,s2],[4.5,s3],[8,s4],[11.5,s5],[15,s6],[17.5,s7]];
+const DUR=22;
+window.DUR=DUR;
+window.render=function(t){
+  curT=t; boil=Math.floor(t*12);
+  document.getElementById('rt').setAttribute('seed',boil%40+1);
+  document.getElementById('gt').setAttribute('seed',Math.floor(t*24)%60+1);
+  let i=SCENES.length-1; while(SCENES[i][0]>t) i--;
+  const [S,fn]=SCENES[i];
+  const out=fn(t-S,S);
+  document.getElementById('stage').style.background=out.bg;
+  document.getElementById('layer').innerHTML=out.h;
+  document.getElementById('fade').setAttribute('opacity',P(t,DUR-.45,.45));
+  lastT=t;
+};
+</script>
+</body></html>
