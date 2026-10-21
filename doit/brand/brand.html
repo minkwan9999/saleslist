@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<style>
+@font-face{font-family:FR;src:url(Fredoka.ttf);font-weight:300 700}
+@font-face{font-family:GA;src:url(GothicA1-Bold.ttf);font-weight:700}
+@font-face{font-family:GA;src:url(GothicA1-Black.ttf);font-weight:900}
+@font-face{font-family:JU;src:url(Jua-Regular.ttf)}
+html,body{margin:0;background:#000}
+#stage{position:relative;width:1080px;height:1920px;overflow:hidden;background:#000}
+#layer{position:absolute;inset:0}
+.a{position:absolute}
+.t{position:absolute;white-space:nowrap;line-height:1;transform-origin:50% 50%}
+.holo{position:absolute;overflow:hidden}
+.holo>div{position:absolute;inset:-60%;filter:url(#swirl)}
+#preload{position:absolute;opacity:0}
+</style></head><body>
+<div id="preload"><span style="font-family:FR;font-weight:700">Do</span><span style="font-family:GA;font-weight:700">가</span><span style="font-family:GA;font-weight:900">가</span><span style="font-family:JU">가</span></div>
+<svg width="0" height="0" style="position:absolute"><defs>
+<filter id="swirl" x="0" y="0" width="100%" height="100%">
+<feTurbulence id="sw" type="fractalNoise" baseFrequency="0.009 0.014" numOctaves="3" seed="4" result="n"/>
+<feDisplacementMap in="SourceGraphic" in2="n" scale="700" xChannelSelector="R" yChannelSelector="G"/>
+</filter>
+</defs></svg>
+<div id="stage"><div id="layer"></div>
+<svg class="a" style="left:0;top:0;pointer-events:none" width="1080" height="1920">
+<filter id="gf"><feTurbulence id="gt" type="fractalNoise" baseFrequency="0.9" numOctaves="2"/><feColorMatrix type="saturate" values="0"/></filter>
+<rect width="1080" height="1920" filter="url(#gf)" style="mix-blend-mode:overlay;opacity:.10"/>
+<rect id="flash" width="1080" height="1920" fill="#fff" opacity="0"/>
+<rect id="fade" width="1080" height="1920" fill="#000" opacity="0"/>
+</svg></div>
+<script>
+const BLACK='#000',WHITE='#FFFFFF',BLUE='#2D5BD6',SKY='#1F9BEA',RED='#E0393E',CYAN='#5EF0E0',GRAY='#7A7A86';
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const P=(t,a,d)=>clamp((t-a)/d);
+const oC=x=>1-Math.pow(1-x,3);
+const ioC=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const oE=x=>x>=1?1:1-Math.pow(2,-10*x);
+const oB=x=>{const c1=2,c3=c1+1;return 1+c3*Math.pow(x-1,3)+c1*Math.pow(x-1,2)};
+const chars=s=>Array.from(s);
+function rnd(k){const v=Math.sin(k*12.9898+3.1)*43758.5453;return v-Math.floor(v)-.5;}
+window.__ev=[];
+let curT=0,lastT=-1;
+// record an event once, on the frame where the clock passes its time
+function ev(type,at){ if(lastT<at && at<=curT) __ev.push([type,+at.toFixed(3)]); }
+
+function T(s,o){
+  const sc=o.sc??1;
+  const fill=o.outline?`color:transparent;-webkit-text-stroke:${o.outline}px ${o.col}`:`color:${o.col}`;
+  return `<div class="t" style="left:${o.x}px;top:${o.y}px;font-family:${o.font||'GA'};font-weight:${o.w||900};font-size:${o.size}px;${fill};opacity:${o.op??1};letter-spacing:${o.ls||0}px;${o.shadow?`text-shadow:${o.shadow};`:''}filter:${o.blur?`blur(${o.blur}px)`:'none'};transform:translate(-50%,-50%) rotate(${o.rot||0}deg) scale(${sc})">${s}</div>`;
+}
+const svg=(inner,style='')=>`<svg class="a" style="left:0;top:0;${style}" width="1080" height="1920">${inner}</svg>`;
+// liquid holographic gradient panel (the reference's marbled fill)
+function holo(x,y,w,h,t,extra=''){
+  return `<div class="holo" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;${extra}"><div style="background:conic-gradient(from ${t*70}deg at 45% 55%,#2D5BD6,#7C3AED,#EC4899,#F59E0B,#FDE047,#22D3EE,#2D5BD6)"></div></div>`;
+}
+function pop(lt,at,o,d=.25){ if(lt<at) return ''; ev('pop',at); const p=oB(P(lt,at,d)); return T(o.s,{...o,sc:(o.sc??1)*p,op:clamp(P(lt,at,.06))}); }
+function blurIn(lt,at,o){ if(lt<at) return ''; const p=oC(P(lt,at,.45)); return T(o.s,{...o,blur:(1-p)*22,sc:(o.sc??1)*(1.12-.12*p),op:p}); }
+
+// the sign's doodle girl carrying a big "D", drawn as line art
+function girl(cx,cy,s,col,t,fillD=BLUE){
+  const leg=Math.sin(t*9)*10, bob=Math.abs(Math.sin(t*9))*-8;
+  return `<g transform="translate(${cx} ${cy+bob}) scale(${s}) translate(-150 -170)" fill="none" stroke="${col}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+   <path d="M30 40 h38 a48 48 0 0 1 0 96 h-38 Z M50 62 h18 a26 26 0 0 1 0 52 h-18 Z" fill="${fillD}" fill-rule="evenodd"/>
+   <path d="M16 36 l-10 -10 M12 56 l-12 -4" />
+   <path d="M128 158 L88 112 M172 158 L110 98"/>
+   <rect x="176" y="150" width="38" height="64" rx="12"/>
+   <path d="M126 140 L176 140 L194 236 L106 236 Z" fill="${BLACK==col?'#fff':'none'}"/>
+   <path d="M136 236 L${128-leg} 292 M164 236 L${176+leg} 288"/>
+   <circle cx="150" cy="92" r="48" fill="${col==='#000'?'#fff':'none'}"/>
+   <path d="M103 90 Q106 40 150 40 Q196 40 199 94 Q186 70 150 68 Q118 70 103 90 Z" fill="${col}"/>
+   <path d="M196 80 Q244 86 232 132 Q216 112 199 102" fill="${col}"/>
+   <circle cx="136" cy="98" r="4" fill="${col}"/><circle cx="166" cy="98" r="4" fill="${col}"/>
+   <path d="M138 114 Q150 124 162 114"/>
+   <path d="M210 300 q16 -30 30 -40" stroke-width="4"/>
+  </g>`;
+}
+// eyes that glance around (reference's 👀)
+function eyes(cx,cy,r,t){
+  const a=t*2.2, px=Math.cos(a)*r*.35, py=Math.sin(a*1.3)*r*.25;
+  let h=''; for(const d of [-1,1]) h+=`<circle cx="${cx+d*r*1.15}" cy="${cy}" r="${r}" fill="#fff" stroke="#000" stroke-width="6"/><circle cx="${cx+d*r*1.15+px}" cy="${cy+py}" r="${r*.45}" fill="#000"/>`;
+  return h;
+}
+// a row of repeated brand words, scrolling
+function row(text,y,size,col,speed,t,outline,font='FR',w=700){
+  const off=((t*speed)%1200+1200)%1200-600;
+  return T((text+'  ').repeat(5),{x:540+off,y,size,col,outline,font,w,op:1});
+}
+
+// ---------- scenes ----------
+function sHook(lt,S){
+  let h='';
+  for(let r=0;r<12;r++) h+=row(r%2?'두잇영어':'DO IT ENGLISH',90+r*160,120,'#2a2a33',r%2?140:-140,lt,2,r%2?'JU':'FR',700);
+  const p=oB(P(lt,.15,.5)); ev('pop',S+.15);
+  const s=.2+.8*p, cx=540, cy=900;
+  const fw=760*s, fh=980*s;
+  h+=holo(cx-fw/2,cy-fh/2,fw,fh,lt);
+  h+=`<div class="a" style="left:${cx-fw/2+40*s}px;top:${cy-fh/2+40*s}px;width:${fw-80*s}px;height:${fh-80*s}px;background:#000"></div>`;
+  h+=holo(cx-fw/2+120*s,cy-fh/2+140*s,fw-240*s,fh-280*s,lt+3);
+  h+=`<div class="a" style="left:${cx-fw/2+160*s}px;top:${cy-fh/2+180*s}px;width:${fw-320*s}px;height:${fh-360*s}px;background:#000"></div>`;
+  h+=svg(girl(cx+20*s,cy+40*s,1.5*s,'#fff',lt));
+  // text bent along an arc around the frame
+  if(lt>.5){ const q=oC(P(lt,.5,.5));
+    h+=svg(`<defs><path id="arc" d="M${cx-430} ${cy+80} A 440 520 0 0 1 ${cx+430} ${cy+80}"/></defs>
+      <text font-family="GA" font-weight="900" font-size="104" fill="#fff" opacity="${q}" transform="rotate(${-8+lt*3} ${cx} ${cy})"><textPath href="#arc" startOffset="${50-(1-q)*30}%" text-anchor="middle">영어, 다시 시작해</textPath></text>`); ev('whoosh',S+.5); }
+  // giant brand rows sweep across
+  if(lt>2.1){ const q=ioC(P(lt,2.1,.6)); ev('whoosh',S+2.1);
+    for(let r=0;r<5;r++){ const dir=r%2?1:-1; const x=540+dir*(1-q)*1600+dir*(lt-2.1)*200;
+      h+=T(r%2?'두잇영어 두잇영어':'DO IT ENGLISH DO',{x,y:420+r*270,size:230,col:r===2?'#fff':(r%2?RED:BLUE),outline:r===2?0:0,font:r%2?'JU':'FR',w:700}); }
+  }
+  return {bg:BLACK,h};
+}
+function sFuse(lt,S){
+  let h='';
+  if(lt<1.6){
+    const z=1+lt*.08;
+    h+=`<div class="a" style="inset:0;transform:scale(${z})">`;
+    h+=svg(`<defs><radialGradient id="rim" cx="35%" cy="25%" r="80%"><stop offset="0" stop-color="#5a4bb5"/><stop offset=".35" stop-color="#1c1835"/><stop offset="1" stop-color="#050508"/></radialGradient></defs>
+      <circle cx="540" cy="1500" r="560" fill="url(#rim)"/>
+      <rect x="430" y="900" width="220" height="70" rx="14" fill="#14121f"/>
+      <g transform="rotate(${18+Math.sin(lt*3)*2} 540 900)">
+        <rect x="508" y="560" width="64" height="340" fill="#F5C542"/><rect x="508" y="560" width="22" height="340" fill="#E0A82E"/>
+        <rect x="508" y="860" width="64" height="40" fill="#C9C9D1"/>
+        <path d="M508 560 L540 480 L572 560 Z" fill="#F2D3A2"/><path d="M530 505 L540 480 L550 505 Z" fill="#222"/>
+      </g>`);
+    const sp=1+.35*Math.sin(lt*40);
+    let star=''; for(let i=0;i<8;i++){ const a=i/8*Math.PI*2+lt*4, r=(i%2?40:95)*sp; star+=`${645+Math.cos(a)*r},${480+Math.sin(a)*r} `; }
+    h+=svg(`<polygon points="${star}" fill="#BFF6FF" opacity=".95"/><circle cx="645" cy="480" r="${26*sp}" fill="#fff"/>`);
+    h+=`</div>`;
+  } else {
+    h+=T('처음부터',{x:300,y:960,size:130,col:WHITE});
+    h+=T('다시',{x:850,y:960,size:130,col:WHITE});
+    const sp=1+.3*Math.sin(lt*40);
+    h+=svg(`<g transform="translate(600 960) rotate(-30)"><rect x="-14" y="-52" width="28" height="80" fill="#F5C542"/><path d="M-14 -52 L0 -78 L14 -52Z" fill="#F2D3A2"/></g><circle cx="${600+48}" cy="${960-70}" r="${14*sp}" fill="#BFF6FF"/>`);
+    if(lt>2.5) h+=T('BANG!',{x:660,y:860,size:44,col:'#ff4fd8',font:'FR',w:700,rot:-12,sc:oB(P(lt,2.5,.2))});
+    ev('pop',S+1.6); ev('tick',S+2.5);
+  }
+  return {bg:BLACK,h};
+}
+function sBurst(lt,S){
+  ev('boom',S);
+  let h=''; const cols=['#2D5BD6','#EC4899','#F59E0B','#22D3EE','#7C3AED','#FDE047','#fff'];
+  let rays=''; for(let i=0;i<46;i++){ const a=i/46*Math.PI*2+lt*.8+rnd(i)*.1, w=.05+rnd(i+3)*.04+.04, R=2200;
+    rays+=`<path d="M540 960 L${540+Math.cos(a-w)*R} ${960+Math.sin(a-w)*R} L${540+Math.cos(a+w)*R} ${960+Math.sin(a+w)*R}Z" fill="${cols[i%cols.length]}" opacity="${.55+.45*(rnd(i+7)+.5)}"/>`; }
+  h+=svg(`<rect width="1080" height="1920" fill="#d9d4cc"/>${rays}<circle cx="540" cy="960" r="${220+lt*400}" fill="#fff" opacity=".9"/>`);
+  const s=.4+lt*1.6;
+  h+=svg(girl(540+lt*80,960-lt*60,s,'#000',lt*2),`transform:rotate(-14deg)`);
+  return {bg:'#fff',h};
+}
+function sStory(lt,S){
+  let h='';
+  if(lt<1.5){
+    const cs=chars('기본부터'); const w=170;
+    cs.forEach((c,i)=>{ const b=lt>.6?Math.sin((lt-.6)*9-i*.8)*22*P(lt,.6,.2):0;
+      h+=T(c,{x:540+(i-1.5)*w,y:960+b,size:170,col:BLACK,blur:(1-oC(P(lt,0,.5)))*20,op:oC(P(lt,0,.4))}); });
+  } else if(lt<3.6){
+    const a=lt-1.5;
+    h+=pop(a,0,{s:'우리의 목표',x:390,y:960,size:150,col:BLACK});
+    h+=svg(eyes(935,955,40,lt),'');
+  } else {
+    const a=lt-3.6;
+    h+=pop(a,0,{s:'단순해요',x:430,y:960,size:150,col:BLACK});
+    const ax=740+oC(P(a,.2,.3))*60+Math.sin(lt*8)*8;
+    h+=svg(`<path d="M${ax} 960 h120 M${ax+80} 910 l50 50 l-50 50" stroke="${BLUE}" stroke-width="30" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`);
+  }
+  return {bg:WHITE,h};
+}
+function sAwesome(lt,S){
+  let h='';
+  const word=(sc,y0)=>T('제대로',{x:540,y:y0-200*sc,size:110*sc,col:WHITE,w:700})+T('이해하는',{x:540,y:y0,size:250*sc,col:WHITE,shadow:`${10*sc}px ${10*sc}px 0 ${CYAN}`})+T('영어',{x:540,y:y0+190*sc,size:100*sc,col:WHITE,w:700});
+  if(lt<.8){
+    h+=pop(lt,0,{s:'제대로',x:540,y:760,size:110,col:BLACK,w:700});
+    h+=T('이해하는',{x:540-(1-oE(P(lt,.15,.35)))*900,y:960,size:250,col:BLACK});
+    h+=pop(lt,.35,{s:'영어',x:540,y:1150,size:100,col:BLACK,w:700});
+    return {bg:WHITE,h};
+  }
+  const a=lt-.8, sc=1-.25*oC(P(a,0,.3));
+  const z=a>1.4?Math.pow(2.6,(a-1.4)/.55):1;  // tunnel zoom at the end
+  h+=`<div class="a" style="inset:0;transform:scale(${z});transform-origin:540px 960px">`;
+  h+=holo(-200,-200,1480,2320,lt);
+  for(let k=3;k>=0;k--){ const w=900-k*0+(-k*0), f=1+k*.42;
+    if(k>0) h+=`<div class="a" style="left:${540-450*f}px;top:${960-560*f}px;width:${900*f}px;height:${1120*f}px;border:${26}px solid rgba(0,0,0,.85)"></div>`; }
+  h+=`<div class="a" style="left:110px;top:400px;width:860px;height:1120px;background:#14102e"></div>`;
+  h+=word(sc,960);
+  h+=`</div>`;
+  ev('whoosh',S+.8); ev('whoosh',S+2.2);
+  return {bg:BLACK,h};
+}
+function sSelf(lt,S){
+  let h='';
+  h+=T('스스로',{x:540,y:760,size:110,col:GRAY,w:700,op:oC(P(lt,0,.2))});
+  const ws=['읽고','이해하고','풀어내는'];
+  const i=Math.min(2,Math.floor(lt/.5)); ev('tick',S); ev('tick',S+.5); ev('tick',S+1);
+  const a=lt-i*.5;
+  h+=T(ws[i],{x:540,y:960,size:200,col:i===1?BLUE:BLACK,sc:oB(P(a,0,.18))});
+  if(lt>1.5){ h+=pop(lt,1.5,{s:'힘',x:540,y:1200,size:260,col:RED}); }
+  return {bg:WHITE,h};
+}
+function sTurn(lt,S){
+  let h='';
+  h+=T('YOUR TURN',{x:540,y:700,size:200,col:'rgba(255,255,255,.55)',outline:3,font:'FR',w:700,sc:1+lt*.04});
+  h+=T('YOUR TURN',{x:560,y:1260,size:200,col:'rgba(255,255,255,.55)',outline:3,font:'FR',w:700,sc:1+lt*.04});
+  h+=pop(lt,.1,{s:'이제,',x:380,y:820,size:150,col:WHITE,w:700});
+  h+=pop(lt,.6,{s:'네 차례.',x:560,y:1040,size:250,col:WHITE});
+  h+=T('네 차례.',{x:575,y:1055,size:250,col:'transparent',outline:3,op:lt>.6?.8:0});
+  if(lt>1.2){ const q=oB(P(lt,1.2,.4)); h+=svg(girl(880,1700-150*q,.8,'#fff',lt,'#fff'),'transform:rotate(-8deg)'); }
+  return {bg:SKY,h};
+}
+function logo(x,y,sc,col,op=1,outline=0,dotCol=RED){
+  // "Do it English" in the sign's rounded type; the i-dot carries the accent colour
+  const fill=outline?`color:transparent;-webkit-text-stroke:${outline}px ${col}`:`color:${col}`;
+  return `<div class="t" style="left:${x}px;top:${y}px;font-family:FR;font-weight:700;font-size:${180*sc}px;${fill};opacity:${op};letter-spacing:-2px;transform:translate(-50%,-50%)">Do <span style="position:relative">ı<span style="position:absolute;left:50%;top:${.06*180*sc}px;width:${.2*180*sc}px;height:${.2*180*sc}px;margin-left:${-.1*180*sc}px;border-radius:50%;background:${outline?'transparent':dotCol};${outline?`border:${outline}px solid ${col}`:''}"></span></span>t English</div>`;
+}
+function sLogo(lt,S){
+  let h='';
+  if(lt<1.6){
+    const q=oC(P(lt,0,.4));
+    h+=logo(540,960,q*.25+.75,SKY,q);
+    if(lt>.5){ const g=oC(P(lt,.5,.8)); ev('whoosh',S+.5);
+      let l=''; for(let i=0;i<9;i++){ const y=760+i*50; l+=`<line x1="${540-560*g}" y1="${y}" x2="${540+560*g}" y2="${y}" stroke="#2d6fae" stroke-width="2" opacity=".6"/>`; }
+      for(let i=0;i<7;i++){ const x=170+i*125; l+=`<line x1="${x}" y1="${960-300*g}" x2="${x}" y2="${960+300*g}" stroke="#2d6fae" stroke-width="2" opacity=".5"/>`; }
+      l+=`<circle cx="330" cy="960" r="${170*g}" stroke="#2d6fae" stroke-width="2" fill="none"/><circle cx="760" cy="960" r="${230*g}" stroke="#2d6fae" stroke-width="2" fill="none"/>`;
+      for(let i=0;i<14;i++){ const x=160+i*58+rnd(i)*20, y=900+(i%3)*60; l+=`<rect x="${x-6}" y="${y-6}" width="12" height="12" fill="none" stroke="${i%4?CYAN:'#ff4fd8'}" stroke-width="2" opacity="${g}"/>`; }
+      h=svg(l)+logo(540,960,1,SKY,1-g*.6)+logo(540,960,1,'#4aa8ff',g,2);
+    }
+  } else if(lt<3.6){
+    const a=lt-1.6; ev('whoosh',S+1.6);
+    const x=1500-a*1500;
+    h+=T('Do it',{x,y:960,size:900,col:WHITE,font:'FR',w:700});
+    h+=svg(`<line x1="0" y1="430" x2="1080" y2="430" stroke="#888" stroke-width="3" stroke-dasharray="26 18"/><line x1="0" y1="1490" x2="1080" y2="1490" stroke="#888" stroke-width="3" stroke-dasharray="26 18"/>`);
+    h+=holo(820-a*300,370,90,90,lt);
+  } else {
+    const a=lt-3.6;
+    for(let r=0;r<12;r++) h+=row('Do it English',90+r*160,120,'#1b1b22',r%2?60:-60,lt,2);
+    h+=`<div class="a" style="left:0;top:0;width:1080px;height:1920px;transform:scale(${1.08-.08*oC(P(a,0,.6))});transform-origin:540px 960px">`+logo(540,900,1,WHITE)+`</div>`;
+    h+=pop(a,.35,{s:'두잇영어',x:540,y:1090,size:100,col:WHITE,font:'JU',w:400});
+    h+=T('영어 교습소',{x:540,y:1200,size:46,col:GRAY,w:700,op:oC(P(a,.7,.3))});
+  }
+  return {bg:BLACK,h};
+}
+function sSlogan(lt,S){
+  let h=''; ev('boom',S+.45);
+  h+=holo(140,560,800,800,lt);
+  h+=`<div class="a" style="left:190px;top:610px;width:700px;height:700px;background:#000"></div>`;
+  h+=pop(lt,.0,{s:'감 말고,',x:540,y:760,size:110,col:GRAY,w:700});
+  h+=T('실력.',{x:540,y:1010,size:300,col:WHITE,sc:lt<.45?0:(1.6-.6*oE(P(lt,.45,.2))),blur:lt<.65?(.65-lt)*40:0});
+  if(lt>.45){ let b=''; for(let i=0;i<34;i++){ const on=rnd(i+Math.floor(lt*12)*31)>.1; if(!on) continue;
+      const x=(rnd(i*3)+.5)*1080, y=(rnd(i*7)+.5)*1920, s=20+(rnd(i*5)+.5)*60;
+      b+=`<rect x="${x}" y="${y}" width="${s}" height="${s}" fill="${['#2D5BD6','#EC4899','#22D3EE','#FDE047','#7C3AED'][i%5]}" opacity=".85"/>`; }
+    h+=svg(b); }
+  return {bg:BLACK,h};
+}
+function mockSign(a){
+  let s=`<rect width="1080" height="1920" fill="#8CC8F2"/><rect x="0" y="1300" width="1080" height="620" fill="#cfc6b6"/>
+   <polygon points="120,300 1080,180 1080,1920 120,1920" fill="#EDE7DA"/><polygon points="0,380 120,300 120,1920 0,1920" fill="#d8d0c0"/>
+   <rect x="220" y="560" width="760" height="230" rx="8" fill="#fff" stroke="#bbb" stroke-width="4"/>
+   <g>`;
+  for(let i=0;i<6;i++) s+=`<rect x="${230+i*125}" y="900" width="115" height="190" fill="#fff" stroke="#111" stroke-width="10"/>`;
+  s+=`</g>`;
+  const lbl=['영어','전문','두잇','영어','상담','문의'];
+  return svg(s)+logo(600,660,.62,'#111',1)+lbl.map((w,i)=>T(w,{x:287+i*125,y:995,size:46,col:i<4?(i%2?RED:BLUE):'#111',font:'JU',w:400})).join('')+T('010.4853.9297',{x:600,y:745,size:40,col:'#111',font:'FR',w:600});
+}
+function mockPhone(a){
+  return `<div class="a" style="left:240px;top:260px;width:600px;height:1300px;border-radius:80px;background:#111;transform:rotate(-6deg);box-shadow:0 40px 80px rgba(0,0,0,.35)">
+   <div class="a" style="left:26px;top:26px;width:548px;height:1248px;border-radius:58px;background:#F3F4F6;overflow:hidden">
+    <div class="a" style="left:0;top:0;width:548px;height:170px;background:#03C75A"></div>
+    <div class="t" style="left:274px;top:110px;font-family:GA;font-weight:900;font-size:44px;color:#fff;transform:translate(-50%,-50%)">두잇영어 톡톡</div>
+    <div class="a" style="left:150px;top:260px;padding:26px 30px;border-radius:30px;background:#03C75A;color:#fff;font-family:GA;font-weight:700;font-size:36px;white-space:nowrap;opacity:${oC(P(a,.15,.2))}">레벨진단 예약할게요!</div>
+    <div class="a" style="left:34px;top:420px;padding:26px 30px;border-radius:30px;background:#fff;color:#111;font-family:GA;font-weight:700;font-size:36px;line-height:1.35;opacity:${oC(P(a,.5,.2))}">무료 1:1 레벨진단<br>가능한 시간 알려드릴게요</div>
+   </div></div>`+T('네이버 톡톡으로 예약',{x:540,y:1720,size:70,col:'#111'});
+}
+function mockNote(a){
+  return `<div class="a" style="left:230px;top:330px;width:620px;height:860px;border-radius:18px 40px 40px 18px;background:${BLUE};transform:rotate(5deg);box-shadow:0 40px 70px rgba(0,0,0,.35)">
+     <div class="a" style="left:0;top:0;width:60px;height:860px;background:rgba(0,0,0,.18)"></div></div>`
+   +`<div class="a" style="inset:0;transform:rotate(5deg);transform-origin:540px 760px">`+logo(560,600,.6,WHITE)+T('MY ENGLISH NOTE',{x:560,y:720,size:40,col:'rgba(255,255,255,.8)',font:'FR',w:600,ls:6})+`</div>`
+   +T('단어 · 독해 · 문법 · 듣기',{x:540,y:1560,size:70,col:'#111'});
+}
+function sMock(lt,S){
+  const i=Math.min(2,Math.floor(lt/1)); const a=lt-i;
+  ev('whoosh',S); ev('whoosh',S+1); ev('whoosh',S+2);
+  const slide=(1-oE(P(a,0,.25)))*1080;
+  const body=[mockSign,mockPhone,mockNote][i](a);
+  return {bg:i===0?'#8CC8F2':'#ECEAE6',h:`<div class="a" style="inset:0;transform:translateX(${slide}px)">${body}</div>`};
+}
+function sEnd(lt,S){
+  let h='';
+  h+=svg(girl(560,600,1.7,'#fff',lt));
+  h+=pop(lt,.4,{s:'무료 1:1 레벨진단',x:540,y:1010,size:84,col:WHITE});
+  h+=pop(lt,.7,{s:'010-4853-9297',x:540,y:1150,size:96,col:SKY,font:'FR',w:700});
+  h+=T('수업 중엔 문자 문의를 권장해요',{x:540,y:1240,size:44,col:GRAY,w:700,op:oC(P(lt,.9,.3))});
+  h+=T('울산 북구 산하동 화암1길 51, 2층',{x:540,y:1340,size:52,col:WHITE,w:700,op:oC(P(lt,1.0,.3))});
+  h+=logo(540,1540,.5,WHITE,oC(P(lt,1.2,.3)));
+  h+=T('교습소 신고번호 제3785호',{x:540,y:1830,size:32,col:GRAY,w:700,op:oC(P(lt,1.3,.3))});
+  if(lt>3.4){ let b=''; for(let i=0;i<26;i++){ const y=(rnd(i+Math.floor(lt*24))+.5)*1920; b+=`<rect x="0" y="${y}" width="${(rnd(i*9)+.5)*1080}" height="${10+(rnd(i*4)+.5)*40}" fill="${['#ff2bd6','#2bff88','#fff','#2bd5ff'][i%4]}" opacity=".8"/>`; } h+=svg(b); ev('glitch',S+3.4); }
+  return {bg:BLACK,h};
+}
+const SCENES=[[0,sHook],[3,sFuse],[6,sBurst],[7,sStory],[13,sAwesome],[16.2,sSelf],[18.5,sTurn],[21,sLogo],[26.5,sSlogan],[28,sMock],[31,sEnd]];
+const DUR=34.8;
+window.DUR=DUR;
+window.render=function(t){
+  curT=t;
+  document.getElementById('gt').setAttribute('seed',Math.floor(t*24)%60+1);
+  let i=SCENES.length-1; while(SCENES[i][0]>t) i--;
+  SCENES.forEach(([s])=>ev('cut',s));
+  const [S,fn]=SCENES[i];
+  const out=fn(t-S,S);
+  document.getElementById('stage').style.background=out.bg;
+  document.getElementById('layer').innerHTML=out.h;
+  document.getElementById('flash').setAttribute('opacity',t>=6&&t<6.12?1-(t-6)/.12:0);
+  document.getElementById('fade').setAttribute('opacity',Math.max(P(t,DUR-1.0,.3),0));
+  lastT=t;
+};
+</script>
+</body></html>
