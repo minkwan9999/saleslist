@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<style>
+@font-face{font-family:BH;src:url(BlackHanSans-Regular.ttf)}
+@font-face{font-family:DH;src:url(DoHyeon-Regular.ttf)}
+@font-face{font-family:ED;src:url(EastSeaDokdo-Regular.ttf)}
+html,body{margin:0;background:#000}
+#stage{position:relative;width:1080px;height:1920px;overflow:hidden;background:#16133A}
+#layer{position:absolute;inset:0}
+.a{position:absolute}
+.t{position:absolute;white-space:nowrap;line-height:1;transform-origin:50% 50%}
+.pill{position:absolute;white-space:nowrap;border-radius:999px;line-height:1;transform-origin:50% 50%}
+#grain{position:absolute;left:0;top:0;pointer-events:none}
+#preload{position:absolute;opacity:0}
+</style></head><body>
+<div id="preload"><span style="font-family:BH">가</span><span style="font-family:DH">가</span><span style="font-family:ED">가</span></div>
+<div id="stage">
+<div id="layer"></div>
+<svg id="grain" width="1080" height="1920">
+<filter id="gf"><feTurbulence id="gt" type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="1"/><feColorMatrix type="saturate" values="0"/></filter>
+<rect width="1080" height="1920" filter="url(#gf)" style="mix-blend-mode:overlay;opacity:.13"/>
+<rect id="flash" width="1080" height="1920" fill="#fff" opacity="0"/>
+<rect id="fade" width="1080" height="1920" fill="#000" opacity="0"/>
+</svg>
+</div>
+<script>
+const NAVY='#16133A',WHITE='#F7F5EF',ORANGE='#E8552B',NEON='#D7FF3A',GRAY='#8C89A8',NAVER='#03C75A';
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const P=(t,a,d)=>clamp((t-a)/d);
+const oC=x=>1-Math.pow(1-x,3);
+const oE=x=>x>=1?1:1-Math.pow(2,-10*x);
+const oB=x=>{const c1=2.4,c3=c1+1;return 1+c3*Math.pow(x-1,3)+c1*Math.pow(x-1,2)};
+const chars=s=>Array.from(s);
+
+window.__ev=[];
+let curT=0,lastT=-1;
+// record an event once, on the frame where the clock passes its time
+function ev(type,at){ if(lastT<at && at<=curT) __ev.push([type,+at.toFixed(3)]); }
+function rnd(k){const v=Math.sin(k*12.9898)*43758.5453;return v-Math.floor(v)-.5;}
+
+function T(s,o){
+  const sc=o.sc??1;
+  const fill=o.outline?`color:transparent;-webkit-text-stroke:${o.outline}px ${o.col}`:`color:${o.col}`;
+  return `<div class="t" style="left:${o.x}px;top:${o.y}px;font-family:${o.font||'BH'};font-size:${o.size}px;${fill};opacity:${o.op??1};letter-spacing:${o.ls||0}px;filter:${o.blur?`blur(${o.blur}px)`:'none'};transform:translate(-50%,-50%) rotate(${o.rot||0}deg) scale(${sc*(o.sx??1)},${sc*(o.sy??1)})">${s}</div>`;
+}
+function pill(s,o){
+  return `<div class="pill" style="left:${o.x}px;top:${o.y}px;background:${o.bg};color:${o.col};font-family:${o.font||'BH'};font-size:${o.size}px;padding:${o.size*.32}px ${o.size*.6}px;opacity:${o.op??1};transform:translate(-50%,-50%) scale(${o.sc??1})">${s}</div>`;
+}
+const svg=(inner)=>`<svg class="a" style="left:0;top:0" width="1080" height="1920">${inner}</svg>`;
+
+// --- word entrance styles, all keyed to the word's voice onset `at` ---
+// pop: quick scale-in; slam: huge -> settle with blur + screen shake
+function word(lt,o){
+  const at=o.at; if(lt<at) return '';
+  const fx=o.fx||'pop';
+  if(fx==='pop'){ const p=oB(P(lt,at,.14)); return T(o.s,{...o,sc:(o.sc??1)*(.4+.6*p),op:clamp(P(lt,at,.05))}); }
+  if(fx==='slam'){ ev('hit',at); const p=P(lt,at,.18); return T(o.s,{...o,sc:(o.sc??1)*(2.6-1.6*oE(p)),blur:(1-p)*14,op:clamp(p*5)}); }
+  if(fx==='drop'){ const p=oB(P(lt,at,.22)); return T(o.s,{...o,y:o.y-(1-p)*500,op:clamp(P(lt,at,.05))}); }
+  if(fx==='spread'){ // letters start wide apart and snap together (ref1 "attentive")
+    const p=oE(P(lt,at,.3)); return T(o.s,{...o,ls:(o.ls||0)+(1-p)*120,op:clamp(P(lt,at,.06))}); }
+  if(fx==='type'){ const cs=chars(o.s); const n=Math.min(cs.length,Math.floor((lt-at)*28)+1);
+    return T(cs.slice(0,n).join('')+'<span style="opacity:0">'+cs.slice(n).join('')+'</span>',o); }
+  return '';
+}
+// outline echoes stacked above/below a word (ref1 "stylish")
+function echo(lt,o,n=3,gap){
+  if(lt<o.at) return '';
+  const p=oE(P(lt,o.at+.05,.35)); let h='';
+  for(let k=1;k<=n;k++) for(const d of [-1,1])
+    h+=T(o.s,{...o,y:o.y+d*k*gap*p,outline:3,op:(1-k/(n+1))*p,fx:null});
+  return h;
+}
+// radial burst lines (ref2 "YOU")
+function burst(lt,at,cx,cy,col,r0=260,r1=520,n=28){
+  if(lt<at) return '';
+  const p=oE(P(lt,at,.3)), fade=1-P(lt,at+.5,.4); let l='';
+  for(let i=0;i<n;i++){ const a=i/n*Math.PI*2+rnd(i)*.15, ra=r0+(r1-r0)*.15*p, rb=ra+(r1-r0)*p*(.6+.4*(rnd(i+9)+.5));
+    l+=`<line x1="${cx+Math.cos(a)*ra}" y1="${cy+Math.sin(a)*ra}" x2="${cx+Math.cos(a)*rb}" y2="${cy+Math.sin(a)*rb}" stroke="${col}" stroke-width="9" stroke-linecap="round" opacity="${fade}"/>`; }
+  return svg(l);
+}
+// hand-drawn underline that draws on
+function underline(lt,at,x,y,w,col,d=.25){
+  if(lt<at) return '';
+  const p=oC(P(lt,at,d));
+  return svg(`<path d="M${x-w/2} ${y} q${w*.25} -14 ${w*.5} -4 t${w*.5} -6" stroke="${col}" stroke-width="18" fill="none" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="${1-p}"/>`);
+}
+function strike(lt,at,x,y,w,col){
+  if(lt<at) return '';
+  const p=oE(P(lt,at,.18));
+  return `<div class="a" style="left:${x-w/2}px;top:${y-9}px;width:${w*p}px;height:18px;background:${col};transform:rotate(-4deg)"></div>`;
+}
+function pillIn(lt,at,s,o){
+  if(lt<at) return '';
+  const p=oB(P(lt,at,.2)); ev('tick',at);
+  return pill(s,{...o,sc:p,op:clamp(P(lt,at,.05))});
+}
+// rows of repeated outline words scrolling behind (ref2 "THOUSANDS" wall)
+function wall(lt,at,s,col,size){
+  if(lt<at) return '';
+  const p=oC(P(lt,at,.25)); let h='';
+  for(let r=0;r<11;r++){ const dir=r%2?1:-1, off=((lt-at)*220*dir+r*170)%600-300;
+    h+=T((s+' ').repeat(6),{x:540+off,y:120+r*170,size,col,font:'BH',outline:2,op:.35*p}); }
+  return h;
+}
+
+// voice onsets (seconds) measured from the narration track
+const CARDS=[
+ {t:0,bg:NAVY,draw:(lt)=>[
+   word(lt,{s:'단어는',at:.12,x:540,y:720,size:150,col:WHITE,font:'DH'}),
+   word(lt,{s:'또',at:.64,x:190,y:740,size:330,col:NEON,font:'ED',rot:-12}),
+   word(lt,{s:'까먹고',at:.88,x:560,y:1100,size:290,col:WHITE,fx:'slam'}),
+   T('까먹고',{x:560+rnd(Math.floor(lt*24))*30,y:1100,size:290,col:ORANGE,op:lt>1.2?.55:0}),
+ ].join('')},
+ {t:1.76,bg:WHITE,draw:(lt,S)=>[
+   word(lt,{s:'해석은',at:1.76,x:540,y:720,size:150,col:NAVY,font:'DH'}),
+   word(lt,{s:'또',at:2.32,x:890,y:740,size:330,col:ORANGE,font:'ED',rot:10}),
+   word(lt,{s:'막히고',at:2.56,x:520,y:1100,size:290,col:NAVY,fx:'slam'}),
+   strike(lt,2.85,520,1100,880,ORANGE),
+ ].join('')},
+ {t:3.32,bg:ORANGE,draw:(lt)=>[
+   word(lt,{s:'학원',at:3.32,x:540,y:520,size:120,col:WHITE,font:'DH'}),
+   word(lt,{s:'다니는데',at:3.68,x:540,y:650,size:120,col:WHITE,font:'DH'}),
+   word(lt,{s:'왜',at:4.24,x:540,y:960,size:520,col:NAVY,fx:'slam'}),
+   word(lt,{s:'그대로냐고?',at:4.48,x:540,y:1330,size:160,col:WHITE,fx:'spread'}),
+ ].join('')},
+ {t:5.48,bg:NAVY,draw:(lt)=>[
+   wall(lt,5.7,'진도',WHITE,130),
+   echo(lt,{s:'진도만',at:5.48,x:540,y:880,size:260,col:WHITE},3,190),
+   word(lt,{s:'진도만',at:5.48,x:540,y:880,size:260,col:WHITE,fx:'slam'}),
+   word(lt,{s:'나가니까',at:6.02,x:540,y:1240,size:170,col:NEON,font:'DH',fx:'spread'}),
+ ].join('')},
+ {t:6.96,bg:WHITE,draw:(lt)=>[
+   word(lt,{s:'두잇',at:6.96,x:540,y:640,size:240,col:ORANGE}),
+   word(lt,{s:'영어는',at:7.24,x:540,y:880,size:200,col:NAVY}),
+   burst(lt,7.72,540,1250,NAVY,230,440),
+   word(lt,{s:'달라.',at:7.72,x:540,y:1250,size:330,col:ORANGE,fx:'slam'}),
+ ].join('')},
+ {t:8.32,bg:NAVY,draw:(lt)=>[
+   word(lt,{s:'학년',at:8.32,x:400,y:620,size:190,col:WHITE,font:'DH'}),
+   word(lt,{s:'말고,',at:8.76,x:760,y:620,size:150,col:GRAY,font:'DH'}),
+   strike(lt,8.85,400,625,280,ORANGE),
+   word(lt,{s:'네',at:9.36,x:540,y:900,size:340,col:NEON,font:'ED',rot:-8,fx:'drop'}),
+   word(lt,{s:'수준부터.',at:9.64,x:540,y:1160,size:200,col:WHITE,fx:'slam'}),
+   underline(lt,9.95,540,1290,820,NEON),
+   pillIn(lt,10.05,'무학년 개별진도',{x:540,y:1520,size:80,col:WHITE,bg:ORANGE}),
+ ].join('')},
+ {t:10.6,bg:ORANGE,draw:(lt)=>[
+   word(lt,{s:'모르는 건,',at:10.6,x:540,y:600,size:150,col:WHITE,font:'DH'}),
+   word(lt,{s:'원장님한테',at:11.4,x:540,y:850,size:180,col:NAVY,fx:'spread'}),
+   word(lt,{s:'바로.',at:12.44,x:540,y:1170,size:420,col:WHITE,fx:'slam'}),
+   pillIn(lt,12.62,'원장 1:1 밀착 코칭',{x:540,y:1520,size:80,col:WHITE,bg:NAVY}),
+ ].join('')},
+ {t:13.0,bg:NAVY,draw:(lt)=>[
+   word(lt,{s:'감',at:13.0,x:430,y:560,size:170,col:GRAY,font:'DH'}),
+   word(lt,{s:'말고,',at:13.2,x:640,y:560,size:150,col:GRAY,font:'DH'}),
+   strike(lt,13.45,440,565,230,ORANGE),
+   burst(lt,13.88,540,1050,NEON,330,700,36),
+   echo(lt,{s:'실력.',at:13.88,x:540,y:1050,size:440,col:NEON},2,330),
+   word(lt,{s:'실력.',at:13.88,x:540,y:1050,size:440,col:NEON,fx:'slam'}),
+ ].join('')},
+ {t:14.44,bg:WHITE,draw:(lt)=>[
+   word(lt,{s:'무료',at:14.44,x:360,y:620,size:200,col:ORANGE}),
+   word(lt,{s:'1:1',at:14.8,x:720,y:620,size:200,col:NAVY}),
+   word(lt,{s:'레벨진단',at:15.04,x:540,y:860,size:230,col:NAVY,fx:'slam'}),
+   word(lt,{s:'지금',at:16.16,x:540,y:1140,size:150,col:NAVY,font:'DH'}),
+   word(lt,{s:'예약해.',at:16.52,x:540,y:1350,size:250,col:ORANGE,fx:'slam'}),
+   underline(lt,16.8,540,1490,640,NAVY),
+ ].join('')},
+ {t:17.35,bg:NAVY,draw:(lt)=>[
+   word(lt,{s:'초·중·고 영어 전문',at:17.4,x:540,y:440,size:72,col:NEON,font:'DH',fx:'type'}),
+   word(lt,{s:'두잇영어',at:17.45,x:540,y:620,size:250,col:WHITE,fx:'slam'}),
+   pillIn(lt,18.0,'무료 1:1 레벨진단 · 사전 예약',{x:540,y:870,size:70,col:WHITE,bg:ORANGE}),
+   word(lt,{s:'010-4853-9297',at:18.3,x:540,y:1070,size:130,col:WHITE,fx:'spread'}),
+   word(lt,{s:'수업 중엔 문자 문의를 권장해요',at:18.55,x:540,y:1170,size:54,col:GRAY,font:'DH',fx:'type'}),
+   word(lt,{s:'울산 북구 산하동 화암1길 51, 2층',at:18.8,x:540,y:1300,size:64,col:WHITE,font:'DH',fx:'type'}),
+   pillIn(lt,19.1,'네이버 톡톡 예약',{x:540,y:1450,size:62,col:WHITE,bg:NAVER,font:'DH'}),
+   word(lt,{s:'교습소 신고번호 제3785호',at:19.3,x:540,y:1820,size:36,col:GRAY,font:'DH'}),
+ ].join('')},
+];
+// every slam shakes the camera
+const SLAMS=[.88,2.56,4.24,5.48,7.72,9.64,12.44,13.88,15.04,16.52,17.45];
+const DUR=21.5;
+window.DUR=DUR;
+window.render=function(t){
+  curT=t;
+  document.getElementById('gt').setAttribute('seed',Math.floor(t*24)%60+1);
+  let i=CARDS.length-1; while(CARDS[i].t>t) i--;
+  const c=CARDS[i];
+  CARDS.forEach(c=>ev('cut',c.t));
+  let sx=0,sy=0,shake=0;
+  for(const s of SLAMS){ const d=t-s; if(d>=0&&d<.3){ shake=Math.max(shake,(1-d/.3)*(s===13.88?38:20)); } }
+  const k=Math.floor(t*30); sx=rnd(k)*shake*2; sy=rnd(k+77)*shake*2;
+  document.getElementById('stage').style.background=c.bg;
+  const L=document.getElementById('layer');
+  L.innerHTML=c.draw(t,c.t);
+  L.style.transform=`translate(${sx}px,${sy}px)`;
+  document.getElementById('flash').setAttribute('opacity',t>=13.88&&t<13.95?.85:0);
+  document.getElementById('fade').setAttribute('opacity',P(t,DUR-.4,.4));
+  lastT=t;
+};
+</script>
+</body></html>
